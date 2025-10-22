@@ -41,7 +41,7 @@ export default function AudioUploader({ onAudioProcessed }) {
   return (
     <div className="flex flex-col items-center space-y-6 mt-8">
       <div className="p-6 border rounded-xl shadow-md w-full max-w-md bg-white">
-        <h2 className="text-xl font-semibold mb-4 text-center">Audio Processor</h2>
+        <h2 className="text-2xl font-bold mb-4 text-center">Audio Processor</h2>
         <label htmlFor="file-input" className="block mb-2">Choose an audio file, 10-50 MB</label>
         <input
           type="file"

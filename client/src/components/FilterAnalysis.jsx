@@ -524,7 +524,7 @@ export default function FilterAnalysis({ filterParams, sampleRate = 44100 }) {
         {/* Pole-Zero Plot */}
         {showPoleZero && poleZeroData && (
           <div className="mb-6">
-            <div className="h-96">
+            <div className="h-auto">
               <Line data={poleZeroData} options={poleZeroOptions} />
             </div>
           </div>
@@ -533,7 +533,7 @@ export default function FilterAnalysis({ filterParams, sampleRate = 44100 }) {
         {/* Frequency Response */}
         {frequencyResponseData && (
           <div className="mb-6">
-            <div className="h-96">
+            <div className="h-auto">
               <Line data={frequencyResponseData} options={frequencyResponseOptions} />
             </div>
           </div>
@@ -542,7 +542,7 @@ export default function FilterAnalysis({ filterParams, sampleRate = 44100 }) {
         {/* Impulse Response */}
         {showImpulseResponse && impulseResponseData && (
           <div className="mb-6">
-            <div className="h-64">
+            <div className="h-auto">
               <Line data={impulseResponseData} options={impulseResponseOptions} />
             </div>
           </div>
@@ -551,7 +551,7 @@ export default function FilterAnalysis({ filterParams, sampleRate = 44100 }) {
         {/* Step Response */}
         {showStepResponse && stepResponseData && (
           <div className="mb-6">
-            <div className="h-64">
+            <div className="h-auto">
               <Line data={stepResponseData} options={stepResponseOptions} />
             </div>
           </div>
@@ -560,7 +560,7 @@ export default function FilterAnalysis({ filterParams, sampleRate = 44100 }) {
         {/* Group Delay */}
         {showGroupDelay && groupDelayData && (
           <div className="mb-6">
-            <div className="h-64">
+            <div className="h-auto">
               <Line data={groupDelayData} options={groupDelayOptions} />
             </div>
           </div>
