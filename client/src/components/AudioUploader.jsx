@@ -4,7 +4,7 @@ import { useState } from "react";
 import WaveformChart from "./WaveformChart";
 import SpectrumChart from "./SpectrumChart";
 
-export default function AudioUploader() {
+export default function AudioUploader({ onAudioProcessed }) {
   const [file, setFile] = useState(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -22,12 +22,15 @@ export default function AudioUploader() {
     formData.append("audio", file);
 
     try {
-      const res = await fetch("http://localhost:5000/api/upload", {
+      const res = await fetch("/api/upload", {
         method: "POST",
         body: formData,
       });
       const json = await res.json();
       setData(json.data);
+      if (onAudioProcessed) {
+        onAudioProcessed(json.data);
+      }
     } catch (err) {
       alert("Upload failed: " + err.message);
     } finally {
@@ -39,12 +42,13 @@ export default function AudioUploader() {
     <div className="flex flex-col items-center space-y-6 mt-8">
       <div className="p-6 border rounded-xl shadow-md w-full max-w-md bg-white">
         <h2 className="text-xl font-semibold mb-4 text-center">Audio Processor</h2>
+        <label htmlFor="file-input" className="block mb-2">Choose an audio file, 10-50 MB</label>
         <input
           type="file"
           accept="audio/*"
           onChange={handleFileChange}
           className="block w-full border p-2 rounded mb-3"
-          placeholder="Choose an audio file (<60s)"
+          id="file-input"
         />
         <button
           onClick={handleUpload}
