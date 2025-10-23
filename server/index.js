@@ -36,7 +36,13 @@ const runMatlabExecutable = (executableName, args, outputPath) => {
     const executablePath = path.resolve("matlab-executables", executableName);
     const matlabProcess = spawn(executablePath, args);
 
+    let stdoutData = '';
     let stderrData = '';
+
+    matlabProcess.stdout.on("data", (data) => {
+      stdoutData += data.toString();
+      console.log("MATLAB output:", data.toString());
+    });
     
     matlabProcess.stderr.on("data", (data) => {
       stderrData += data.toString();
@@ -45,9 +51,9 @@ const runMatlabExecutable = (executableName, args, outputPath) => {
 
     matlabProcess.on("close", (code) => {
       console.log(`MATLAB ${executableName} exited with code ${code}`);
-      
+
       if (code !== 0) {
-        return reject(new Error(`MATLAB process failed with code ${code}: ${stderrData}`));
+        return reject(new Error(`MATLAB process failed with code ${code}.\nSTDOUT: ${stdoutData}\nSTDERR: ${stderrData}`));
       }
 
       if (!fs.existsSync(outputPath)) {
@@ -184,9 +190,10 @@ app.post("/api/generate-signal", async (req, res) => {
 
     // Save parameters to temporary file
     const paramsPath = path.resolve("outputs", `params_${Date.now()}.json`);
+    console.log("Parameters JSON path:", paramsPath);
     fs.writeFileSync(paramsPath, JSON.stringify(parameters));
 
-    const result = await runMatlabExecutable("generateSignal", [signalType, paramsPath, outputPath]);
+    const result = await runMatlabExecutable("generateSignal", [signalType, paramsPath, outputPath], outputPath);
 
     // Cleanup
     fs.unlink(paramsPath, () => {});

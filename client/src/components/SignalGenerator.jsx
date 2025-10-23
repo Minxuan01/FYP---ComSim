@@ -21,7 +21,6 @@ export default function SignalGenerator({ onSignalGenerated }) {
   const generateSignal = async () => {
     try {
       const parameters = {
-        signalType,
         frequency,
         amplitude,
         duration,
@@ -37,7 +36,7 @@ export default function SignalGenerator({ onSignalGenerated }) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(parameters)
+        body: JSON.stringify({ signalType, parameters })
       });
 
       if (!response.ok) {

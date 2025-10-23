@@ -1,11 +1,19 @@
 % MATLAB function for generating various types of signals
 % Usage: generateSignal(signalType, parameters, outputPath)
 
-function generateSignal(signalType, parameters, outputPath)
+function generateSignal(varargin)
     try
-        % Parse parameters
-        if ischar(parameters)
-            params = jsondecode(fileread(parameters));
+        % Parse arguments
+        if numel(varargin) < 3
+            error('Not enough input arguments.');
+        end
+        signalType = varargin{1};
+        parameters = varargin{2};
+        outputPath = varargin{3};
+        
+        % Ensure parameters is a char array
+        if isstring(parameters) || ischar(parameters)
+            params = jsondecode(fileread(char(parameters)));
         else
             params = parameters;
         end
@@ -56,28 +64,6 @@ function generateSignal(signalType, parameters, outputPath)
                 dutyCycle = params.dutyCycle;
                 signal = amplitude * pulstran(t, 0:1/frequency:duration, 'rectpuls', 1/frequency * dutyCycle);
                 
-                
-                
-                
-            case 'brown_noise'
-                signal = generateBrownNoise(N, amplitude);
-                
-            case 'burst'
-                burstFreq = params.burstFreq;
-                burstDuration = params.burstDuration;
-                signal = amplitude * sin(2 * pi * burstFreq * t) .* rectpuls(t - duration/2, burstDuration);
-                
-                
-            case 'comb'
-                fundamentalFreq = frequency;
-                numHarmonics = params.numHarmonics;
-                signal = zeros(size(t));
-                for i = 1:numHarmonics
-                    signal = signal + (amplitude / numHarmonics) * sin(2 * pi * i * fundamentalFreq * t + phase);
-                end
-                
-            otherwise
-                error('Unsupported signal type: %s', signalType);
         end
         
         % Add noise if specified
@@ -125,9 +111,8 @@ function generateSignal(signalType, parameters, outputPath)
         
         % Save results as JSON
         jsonStr = jsonencode(results);
-        outputFile = fullfile(outputPath, 'generatedSignal.json');
         
-        fid = fopen(outputFile, 'w');
+        fid = fopen(outputPath, 'w');
         if fid == -1
             error('Cannot create output file');
         end
@@ -135,7 +120,7 @@ function generateSignal(signalType, parameters, outputPath)
         fclose(fid);
         
         fprintf('Signal generation completed successfully\n');
-        fprintf('Results saved to: %s\n', outputFile);
+        fprintf('Results saved to: %s\n', outputPath);
         
     catch ME
         fprintf('Error: %s\n', ME.message);
@@ -147,17 +132,4 @@ function generateSignal(signalType, parameters, outputPath)
         end
         exit(1);
     end
-end
-
-
-% Generate brown noise (random walk)
-function brownNoise = generateBrownNoise(N, amplitude)
-    brownNoise = zeros(N, 1);
-    
-    for i = 2:N
-        brownNoise(i) = brownNoise(i-1) + (2 * rand() - 1);
-    end
-    
-    % Normalize
-    brownNoise = brownNoise / max(abs(brownNoise)) * amplitude;
 end
