@@ -1,23 +1,22 @@
 % MATLAB function for comprehensive filter design
 % Usage: designFilter(filterType, filterDesign, cutoffFreq, highCutoffFreq, filterOrder, ripple, stopbandAttenuation, sampleRate, outputPath)
 
-function designFilter(filterType, filterDesign, cutoffFreq, highCutoffFreq, filterOrder, ripple, stopbandAttenuation, sampleRate, outputPath)
+function designFilter(varargin)
     try
-        % Convert string inputs to appropriate types
-        if ischar(filterType)
-            filterType = string(filterType);
+        if numel(varargin) < 9
+            error('Not enough input arguments.');
         end
-        if ischar(filterDesign)
-            filterDesign = string(filterDesign);
-        end
-        
-        cutoffFreq = str2double(cutoffFreq);
-        highCutoffFreq = str2double(highCutoffFreq);
-        filterOrder = str2double(filterOrder);
-        ripple = str2double(ripple);
-        stopbandAttenuation = str2double(stopbandAttenuation);
-        sampleRate = str2double(sampleRate);
-        
+
+        filterType = string(varargin{1});
+        filterDesign = string(varargin{2});
+        cutoffFreq = str2double(varargin{3});
+        highCutoffFreq = str2double(varargin{4});
+        filterOrder = str2double(varargin{5});
+        ripple = str2double(varargin{6});
+        stopbandAttenuation = str2double(varargin{7});
+        sampleRate = str2double(varargin{8});
+        outputPath = char(varargin{9});     % Convert to char for file operations
+
         % Normalize frequencies
         nyquist = sampleRate / 2;
         normalizedCutoff = cutoffFreq / nyquist;
@@ -37,8 +36,6 @@ function designFilter(filterType, filterDesign, cutoffFreq, highCutoffFreq, filt
                 [b, a] = designChebyshev2(filterType, normalizedCutoff, normalizedHighCutoff, filterOrder, stopbandAttenuation);
             case 'elliptic'
                 [b, a] = designElliptic(filterType, normalizedCutoff, normalizedHighCutoff, filterOrder, ripple, stopbandAttenuation);
-            case 'bessel'
-                [b, a] = designBessel(filterType, normalizedCutoff, normalizedHighCutoff, filterOrder);
             otherwise
                 error('Unsupported filter design: %s', filterDesign);
         end
@@ -71,9 +68,9 @@ function designFilter(filterType, filterDesign, cutoffFreq, highCutoffFreq, filt
         results.frequencyResponse.magnitude = magnitude;
         results.frequencyResponse.phase = phase;
         
-        results.poleZero = struct();
-        results.poleZero.zeros = z;
-        results.poleZero.poles = p;
+        [z, p, k] = tf2zp(b, a);
+        results.poleZero.zeros = struct('real', real(z), 'imag', imag(z));
+        results.poleZero.poles = struct('real', real(p), 'imag', imag(p));
         results.poleZero.gain = k;
         
         results.timeResponse = struct();
@@ -94,9 +91,8 @@ function designFilter(filterType, filterDesign, cutoffFreq, highCutoffFreq, filt
         
         % Save results as JSON
         jsonStr = jsonencode(results);
-        outputFile = fullfile(outputPath, 'filterDesign.json');
-        
-        fid = fopen(outputFile, 'w');
+
+        fid = fopen(outputPath, 'w');
         if fid == -1
             error('Cannot create output file');
         end
@@ -104,7 +100,7 @@ function designFilter(filterType, filterDesign, cutoffFreq, highCutoffFreq, filt
         fclose(fid);
         
         fprintf('Filter design completed successfully\n');
-        fprintf('Results saved to: %s\n', outputFile);
+        fprintf('Results saved to: %s\n', outputPath);
         
     catch ME
         fprintf('Error: %s\n', ME.message);
@@ -177,28 +173,6 @@ function [b, a] = designElliptic(filterType, cutoffFreq, highCutoffFreq, order, 
             [b, a] = ellip(order, ripple, stopbandAttenuation, [cutoffFreq, highCutoffFreq], 'bandpass');
         case 'bandstop'
             [b, a] = ellip(order, ripple, stopbandAttenuation, [cutoffFreq, highCutoffFreq], 'stop');
-        otherwise
-            error('Unsupported filter type: %s', filterType);
-    end
-end
-
-% Bessel filter design
-function [b, a] = designBessel(filterType, cutoffFreq, highCutoffFreq, order)
-    switch lower(filterType)
-        case 'lowpass'
-            [b, a] = besself(order, cutoffFreq * pi);
-            [b, a] = bilinear(b, a, 1); % Convert to digital
-        case 'highpass'
-            [b, a] = besself(order, cutoffFreq * pi);
-            [b, a] = bilinear(b, a, 1); % Convert to digital
-            [b, a] = iirlp2hp(b, a, cutoffFreq, cutoffFreq * 1.5); % Transform to highpass
-        case 'bandpass'
-            [b, a] = besself(order, [cutoffFreq, highCutoffFreq] * pi);
-            [b, a] = bilinear(b, a, 1); % Convert to digital
-        case 'bandstop'
-            [b, a] = besself(order, [cutoffFreq, highCutoffFreq] * pi);
-            [b, a] = bilinear(b, a, 1); % Convert to digital
-            [b, a] = iirlp2bs(b, a, cutoffFreq, highCutoffFreq); % Transform to bandstop
         otherwise
             error('Unsupported filter type: %s', filterType);
     end

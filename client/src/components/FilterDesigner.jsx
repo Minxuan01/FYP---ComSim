@@ -318,7 +318,7 @@ export default function FilterDesigner({ audioData, onFilterApplied }) {
     datasets: [
       {
         label: 'Magnitude Response (dB)',
-        data: filterResponse.magnitudes.slice(0, 1000),
+        data: filterResponse.magnitude.slice(0, 1000),
         borderColor: 'rgba(59, 130, 246, 0.8)',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         borderWidth: 2,
@@ -327,7 +327,7 @@ export default function FilterDesigner({ audioData, onFilterApplied }) {
       },
       {
         label: 'Phase Response (degrees)',
-        data: filterResponse.phases.slice(0, 1000),
+        data: filterResponse.phase.slice(0, 1000),
         borderColor: 'rgba(239, 68, 68, 0.8)',
         backgroundColor: 'rgba(239, 68, 68, 0.1)',
         borderWidth: 2,

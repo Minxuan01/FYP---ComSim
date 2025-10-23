@@ -126,7 +126,7 @@ app.post("/api/design-filter", async (req, res) => {
       filterType, filterDesign, cutoffFreq.toString(), highCutoffFreq.toString(), 
       filterOrder.toString(), ripple.toString(), stopbandAttenuation.toString(), 
       sampleRate.toString(), outputPath
-    ]);
+    ], outputPath);
 
     // Cleanup
     fs.unlink(outputPath, () => {});
