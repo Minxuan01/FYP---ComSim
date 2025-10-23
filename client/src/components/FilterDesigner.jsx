@@ -29,43 +29,37 @@ export default function FilterDesigner({ audioData, onFilterApplied }) {
     }
   }, []);
 
-  // Calculate filter coefficients based on type and parameters
-  const calculateFilterCoefficients = () => {
-    const nyquist = sampleRate / 2;
-    const normalizedCutoff = cutoffFreq / nyquist;
-    const normalizedHighCutoff = highCutoffFreq / nyquist;
+  // Calculate filter coefficients using MATLAB backend
+  const calculateFilterCoefficients = async () => {
+    try {
+      const response = await fetch('/api/design-filter', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filterType,
+          filterDesign,
+          cutoffFreq,
+          highCutoffFreq,
+          filterOrder,
+          ripple,
+          stopbandAttenuation,
+          sampleRate
+        })
+      });
 
-    let b, a;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-    switch (filterDesign) {
-      case 'butterworth':
-        if (filterType === 'lowpass') {
-          [b, a] = butterworthLowpass(normalizedCutoff, filterOrder);
-        } else if (filterType === 'highpass') {
-          [b, a] = butterworthHighpass(normalizedCutoff, filterOrder);
-        } else if (filterType === 'bandpass') {
-          [b, a] = butterworthBandpass(normalizedCutoff, normalizedHighCutoff, filterOrder);
-        } else if (filterType === 'bandstop') {
-          [b, a] = butterworthBandstop(normalizedCutoff, normalizedHighCutoff, filterOrder);
-        }
-        break;
-      case 'chebyshev1':
-        if (filterType === 'lowpass') {
-          [b, a] = chebyshev1Lowpass(normalizedCutoff, filterOrder, ripple);
-        } else if (filterType === 'highpass') {
-          [b, a] = chebyshev1Highpass(normalizedCutoff, filterOrder, ripple);
-        }
-        break;
-      case 'elliptic':
-        if (filterType === 'lowpass') {
-          [b, a] = ellipticLowpass(normalizedCutoff, filterOrder, ripple, stopbandAttenuation);
-        }
-        break;
-      default:
-        [b, a] = butterworthLowpass(normalizedCutoff, filterOrder);
+      const result = await response.json();
+      return result.data;
+    } catch (error) {
+      console.error('Error designing filter:', error);
+      alert('Failed to design filter: ' + error.message);
+      return null;
     }
-
-    return { b, a };
   };
 
   // Butterworth filter design functions
@@ -191,94 +185,81 @@ export default function FilterDesigner({ audioData, onFilterApplied }) {
     return result;
   };
 
-  // Calculate frequency response
-  const calculateFrequencyResponse = () => {
-    const { b, a } = calculateFilterCoefficients();
-    const frequencies = [];
-    const magnitudes = [];
-    const phases = [];
-
-    for (let f = 1; f <= sampleRate / 2; f += sampleRate / 2000) {
-      const omega = 2 * Math.PI * f / sampleRate;
-      const z = complex(Math.cos(omega), Math.sin(omega));
+  // Calculate frequency response using MATLAB backend
+  const calculateFrequencyResponse = async () => {
+    try {
+      const filterCoefficients = await calculateFilterCoefficients();
+      if (!filterCoefficients) return null;
       
-      let numerator = complex(0, 0);
-      let denominator = complex(0, 0);
-
-      // Calculate H(z) = B(z)/A(z)
-      for (let i = 0; i < b.length; i++) {
-        numerator = add(numerator, multiply(b[i], pow(z, -i)));
-      }
-      for (let i = 0; i < a.length; i++) {
-        denominator = add(denominator, multiply(a[i], pow(z, -i)));
-      }
-
-      const H = divide(numerator, denominator);
-      const magnitude = 20 * Math.log10(abs(H));
-      const phase = arg(H) * 180 / Math.PI;
-
-      frequencies.push(f);
-      magnitudes.push(magnitude);
-      phases.push(phase);
+      // The frequency response is already included in the filter design result
+      return filterCoefficients.frequencyResponse || null;
+    } catch (error) {
+      console.error('Error calculating frequency response:', error);
+      return null;
     }
-
-    return { frequencies, magnitudes, phases };
   };
 
-  // Apply filter to audio data
-  const applyFilterToAudio = (audioData, b, a) => {
-    // Handle different data structures
-    let signalData;
-    if (audioData.waveform) {
-      // Audio data from file upload (has waveform property)
-      signalData = audioData.waveform;
-    } else if (audioData.signal) {
-      // Generated signal data (has signal property)
-      signalData = audioData.signal;
-    } else if (Array.isArray(audioData)) {
-      // Direct array
-      signalData = audioData;
-    } else {
-      throw new Error('Invalid audio data format');
-    }
+  // Apply filter to audio data using MATLAB backend
+  const applyFilterToAudio = async (audioData, filterCoefficients) => {
+    try {
+      // Prepare signal data
+      let signalData;
+      if (audioData.waveform) {
+        signalData = audioData.waveform;
+      } else if (audioData.signal) {
+        signalData = audioData.signal;
+      } else if (Array.isArray(audioData)) {
+        signalData = audioData;
+      } else {
+        throw new Error('Invalid audio data format');
+      }
 
-    const filtered = new Array(signalData.length).fill(0);
-    
-    // Simple IIR filter implementation
-    for (let n = 0; n < signalData.length; n++) {
-      let output = 0;
-      
-      // Feedforward terms (b coefficients)
-      for (let i = 0; i < b.length && n - i >= 0; i++) {
-        output += b[i] * signalData[n - i];
+      const response = await fetch('/api/apply-filter', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          signal: signalData,
+          filterCoefficients: filterCoefficients,
+          sampleRate: audioData.sampleRate || 44100
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
-      // Feedback terms (a coefficients, skip a[0] which is 1)
-      for (let i = 1; i < a.length && n - i >= 0; i++) {
-        output -= a[i] * filtered[n - i];
-      }
-      
-      filtered[n] = output;
+
+      const result = await response.json();
+      return result.data.filteredSignal;
+    } catch (error) {
+      console.error('Error applying filter:', error);
+      alert('Failed to apply filter: ' + error.message);
+      return null;
     }
-    
-    return filtered;
   };
 
   // Update frequency response when parameters change
   useEffect(() => {
-    const response = calculateFrequencyResponse();
-    setFilterResponse(response);
+    const loadFrequencyResponse = async () => {
+      const response = await calculateFrequencyResponse();
+      setFilterResponse(response);
+    };
+    loadFrequencyResponse();
   }, [filterType, filterDesign, cutoffFreq, highCutoffFreq, filterOrder, ripple, stopbandAttenuation, sampleRate]);
 
   // Handle filter application
-  const handleApplyFilter = () => {
+  const handleApplyFilter = async () => {
     if (!audioData) return;
     
     setIsProcessing(true);
     
     try {
-      const { b, a } = calculateFilterCoefficients();
-      const filtered = applyFilterToAudio(audioData, b, a);
+      const filterCoefficients = await calculateFilterCoefficients();
+      if (!filterCoefficients) return;
+      
+      const filtered = await applyFilterToAudio(audioData, filterCoefficients);
+      if (!filtered) return;
       
       // Create filtered result based on input data structure
       let filteredResult;
@@ -311,7 +292,16 @@ export default function FilterDesigner({ audioData, onFilterApplied }) {
         onFilterApplied({
           original: audioData,
           filtered: filteredResult,
-          filterParams: { filterType, filterDesign, cutoffFreq, highCutoffFreq, filterOrder, ripple, stopbandAttenuation }
+          filterParams: { 
+            filterType, 
+            filterDesign, 
+            cutoffFreq, 
+            highCutoffFreq, 
+            filterOrder, 
+            ripple, 
+            stopbandAttenuation,
+            coefficients: filterCoefficients
+          }
         });
       }
     } catch (error) {

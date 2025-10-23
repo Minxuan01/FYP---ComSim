@@ -12,55 +12,32 @@ export default function FilterAnalysis({ filterParams, sampleRate = 44100 }) {
   const [showGroupDelay, setShowGroupDelay] = useState(true);
   const [showStepResponse, setShowStepResponse] = useState(true);
 
-  // Calculate filter analysis data
+  // Get filter analysis data from MATLAB backend
   const calculateAnalysis = () => {
-    if (!filterParams) return null;
+    if (!filterParams || !filterParams.coefficients) return null;
 
-    const { filterType, filterDesign, cutoffFreq, highCutoffFreq, filterOrder, ripple, stopbandAttenuation } = filterParams;
-    const nyquist = sampleRate / 2;
-    const normalizedCutoff = cutoffFreq / nyquist;
-    const normalizedHighCutoff = highCutoffFreq / nyquist;
-
-    // Calculate filter coefficients
-    let b, a, poles, zeros;
+    // The MATLAB backend should provide all analysis data
+    const coefficients = filterParams.coefficients;
     
-    if (filterDesign === 'butterworth') {
-      if (filterType === 'lowpass') {
-        [b, a, poles, zeros] = butterworthAnalysis(normalizedCutoff, filterOrder, 'lowpass');
-      } else if (filterType === 'highpass') {
-        [b, a, poles, zeros] = butterworthAnalysis(normalizedCutoff, filterOrder, 'highpass');
-      } else if (filterType === 'bandpass') {
-        [b, a, poles, zeros] = butterworthAnalysis(normalizedCutoff, normalizedHighCutoff, filterOrder, 'bandpass');
-      }
-    } else {
-      // Default to butterworth for other designs
-      [b, a, poles, zeros] = butterworthAnalysis(normalizedCutoff, filterOrder, filterType);
-    }
-
-    // Calculate frequency response
-    const frequencyResponse = calculateFrequencyResponse(b, a, sampleRate);
-    
-    // Calculate impulse response
-    const impulseResponse = calculateImpulseResponse(b, a, 1000);
-    
-    // Calculate step response
-    const stepResponse = calculateStepResponse(b, a, 1000);
-    
-    // Calculate group delay
-    const groupDelay = calculateGroupDelay(frequencyResponse.frequencies, frequencyResponse.phases);
-
     return {
-      poles,
-      zeros,
-      frequencyResponse,
-      impulseResponse,
-      stepResponse,
-      groupDelay,
-      coefficients: { b, a }
+      coefficients: coefficients,
+      frequencyResponse: coefficients.frequencyResponse,
+      impulseResponse: coefficients.impulseResponse,
+      stepResponse: coefficients.stepResponse,
+      groupDelay: coefficients.groupDelay,
+      poles: coefficients.poles,
+      zeros: coefficients.zeros
     };
   };
 
-  // Butterworth filter analysis
+  // Update analysis data when filter parameters change
+  useEffect(() => {
+    const analysis = calculateAnalysis();
+    setAnalysisData(analysis);
+  }, [filterParams]);
+
+  // All analysis functions are now handled by MATLAB backend
+  // The following functions are kept for reference but not used:
   const butterworthAnalysis = (cutoff, order, type) => {
     const poles = [];
     const zeros = [];

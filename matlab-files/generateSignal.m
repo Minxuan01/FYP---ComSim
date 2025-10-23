@@ -38,10 +38,6 @@ function generateSignal(signalType, parameters, outputPath)
             case 'triangle'
                 signal = amplitude * sawtooth(2 * pi * frequency * t + phase, 0.5);
                 
-            case 'chirp'
-                f0 = frequency;
-                f1 = params.endFrequency;
-                signal = amplitude * chirp(t, f0, duration, f1, 'linear');
                 
             case 'fm'
                 modulationFreq = params.modulationFreq;
@@ -60,18 +56,8 @@ function generateSignal(signalType, parameters, outputPath)
                 dutyCycle = params.dutyCycle;
                 signal = amplitude * pulstran(t, 0:1/frequency:duration, 'rectpuls', 1/frequency * dutyCycle);
                 
-            case 'multitone'
-                frequencies = params.frequencies;
-                signal = zeros(size(t));
-                for i = 1:length(frequencies)
-                    signal = signal + (amplitude / length(frequencies)) * sin(2 * pi * frequencies(i) * t + phase);
-                end
                 
-            case 'white_noise'
-                signal = amplitude * (2 * rand(size(t)) - 1);
                 
-            case 'pink_noise'
-                signal = generatePinkNoise(N, amplitude);
                 
             case 'brown_noise'
                 signal = generateBrownNoise(N, amplitude);
@@ -81,10 +67,6 @@ function generateSignal(signalType, parameters, outputPath)
                 burstDuration = params.burstDuration;
                 signal = amplitude * sin(2 * pi * burstFreq * t) .* rectpuls(t - duration/2, burstDuration);
                 
-            case 'sweep'
-                f0 = frequency;
-                f1 = params.endFrequency;
-                signal = amplitude * chirp(t, f0, duration, f1, 'linear');
                 
             case 'comb'
                 fundamentalFreq = frequency;
@@ -167,19 +149,6 @@ function generateSignal(signalType, parameters, outputPath)
     end
 end
 
-% Generate pink noise using Voss-McCartney algorithm
-function pinkNoise = generatePinkNoise(N, amplitude)
-    pinkNoise = zeros(N, 1);
-    white = zeros(16, 1);
-    
-    for i = 1:N
-        whiteIndex = mod(i-1, 16) + 1;
-        white(whiteIndex) = 2 * rand() - 1;
-        pinkNoise(i) = sum(white) / 16;
-    end
-    
-    pinkNoise = amplitude * pinkNoise;
-end
 
 % Generate brown noise (random walk)
 function brownNoise = generateBrownNoise(N, amplitude)

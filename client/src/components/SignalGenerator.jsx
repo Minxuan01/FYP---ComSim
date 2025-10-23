@@ -17,120 +17,10 @@ export default function SignalGenerator({ onSignalGenerated }) {
   const [noiseLevel, setNoiseLevel] = useState(0);
   const [generatedSignal, setGeneratedSignal] = useState(null);
 
-  // Generate signal based on current parameters
-  const generateSignal = () => {
-    const samples = Math.floor(duration * sampleRate);
-    const time = Array.from({ length: samples }, (_, i) => i / sampleRate);
-    let signal = new Array(samples).fill(0);
-
-    switch (signalType) {
-      case 'sine':
-        signal = time.map(t => amplitude * Math.sin(2 * Math.PI * frequency * t + phase));
-        break;
-      
-      case 'cosine':
-        signal = time.map(t => amplitude * Math.cos(2 * Math.PI * frequency * t + phase));
-        break;
-      
-      case 'square':
-        signal = time.map(t => {
-          const sine = Math.sin(2 * Math.PI * frequency * t + phase);
-          return amplitude * (sine >= 0 ? 1 : -1);
-        });
-        break;
-      
-      case 'sawtooth':
-        signal = time.map(t => {
-          const normalized = ((frequency * t + phase / (2 * Math.PI)) % 1);
-          return amplitude * (2 * normalized - 1);
-        });
-        break;
-      
-      case 'triangle':
-        signal = time.map(t => {
-          const normalized = ((frequency * t + phase / (2 * Math.PI)) % 1);
-          return amplitude * (normalized < 0.5 ? 4 * normalized - 1 : 3 - 4 * normalized);
-        });
-        break;
-      
-      case 'chirp':
-        signal = time.map(t => {
-          const instantaneousFreq = frequency + (modulationFreq - frequency) * t / duration;
-          return amplitude * Math.sin(2 * Math.PI * instantaneousFreq * t + phase);
-        });
-        break;
-      
-      case 'fm':
-        signal = time.map(t => {
-          const instantaneousFreq = frequency + modulationIndex * Math.sin(2 * Math.PI * modulationFreq * t);
-          return amplitude * Math.sin(2 * Math.PI * instantaneousFreq * t + phase);
-        });
-        break;
-      
-      case 'am':
-        signal = time.map(t => {
-          const carrier = Math.sin(2 * Math.PI * frequency * t + phase);
-          const modulator = 1 + modulationIndex * Math.sin(2 * Math.PI * modulationFreq * t);
-          return amplitude * carrier * modulator;
-        });
-        break;
-      
-      case 'pulse':
-        signal = time.map(t => {
-          const period = 1 / frequency;
-          const position = (t % period) / period;
-          const dutyCycle = 0.5; // 50% duty cycle
-          return position < dutyCycle ? amplitude : 0;
-        });
-        break;
-      
-      case 'multitone':
-        const frequencies = [frequency, frequency * 2, frequency * 3, frequency * 5];
-        signal = time.map(t => {
-          let sum = 0;
-          frequencies.forEach((f, i) => {
-            sum += (amplitude / frequencies.length) * Math.sin(2 * Math.PI * f * t + phase);
-          });
-          return sum;
-        });
-        break;
-      
-      case 'noise':
-        signal = time.map(() => amplitude * (2 * Math.random() - 1));
-        break;
-      
-      case 'pink_noise':
-        signal = generatePinkNoise(samples, amplitude);
-        break;
-      
-      case 'white_noise':
-        signal = time.map(() => amplitude * (2 * Math.random() - 1));
-        break;
-      
-      default:
-        signal = time.map(t => amplitude * Math.sin(2 * Math.PI * frequency * t + phase));
-    }
-
-    // Add noise if specified
-    if (noiseLevel > 0) {
-      signal = signal.map(sample => {
-        const noise = noiseLevel * (2 * Math.random() - 1);
-        return sample + noise;
-      });
-    }
-
-    // Normalize signal
-    const maxAmplitude = Math.max(...signal.map(Math.abs));
-    if (maxAmplitude > 0) {
-      signal = signal.map(s => s / maxAmplitude * amplitude);
-    }
-
-    return {
-      signal,
-      time,
-      sampleRate,
-      duration,
-      parameters: {
+  // Generate signal using MATLAB backend
+  const generateSignal = async () => {
+    try {
+      const parameters = {
         signalType,
         frequency,
         amplitude,
@@ -140,43 +30,50 @@ export default function SignalGenerator({ onSignalGenerated }) {
         modulationFreq,
         modulationIndex,
         noiseLevel
+      };
+
+      const response = await fetch('/api/generate-signal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(parameters)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    };
+
+      const result = await response.json();
+      return result.data;
+    } catch (error) {
+      console.error('Error generating signal:', error);
+      alert('Failed to generate signal: ' + error.message);
+      return null;
+    }
   };
 
-  // Generate pink noise using Voss-McCartney algorithm
-  const generatePinkNoise = (samples, amplitude) => {
-    const pink = new Array(samples).fill(0);
-    const white = new Array(16).fill(0);
-    
-    for (let i = 0; i < samples; i++) {
-      const whiteIndex = i % 16;
-      white[whiteIndex] = Math.random() * 2 - 1;
-      
-      let pinkValue = 0;
-      for (let j = 0; j < 16; j++) {
-        pinkValue += white[j];
-      }
-      
-      pink[i] = (pinkValue / 16) * amplitude;
-    }
-    
-    return pink;
-  };
 
   // Generate signal when parameters change
   useEffect(() => {
-    const signalData = generateSignal();
-    setGeneratedSignal(signalData);
+    const loadSignal = async () => {
+      const signalData = await generateSignal();
+      if (signalData) {
+        setGeneratedSignal(signalData);
+      }
+    };
+    loadSignal();
   }, [signalType, frequency, amplitude, duration, sampleRate, phase, modulationFreq, modulationIndex, noiseLevel]);
 
   // Handle signal generation
-  const handleGenerateSignal = () => {
-    const signalData = generateSignal();
-    setGeneratedSignal(signalData);
-    
-    if (onSignalGenerated) {
-      onSignalGenerated(signalData);
+  const handleGenerateSignal = async () => {
+    const signalData = await generateSignal();
+    if (signalData) {
+      setGeneratedSignal(signalData);
+      
+      if (onSignalGenerated) {
+        onSignalGenerated(signalData);
+      }
     }
   };
 
@@ -242,13 +139,9 @@ export default function SignalGenerator({ onSignalGenerated }) {
               <option value="square">Square Wave</option>
               <option value="sawtooth">Sawtooth Wave</option>
               <option value="triangle">Triangle Wave</option>
-              <option value="chirp">Linear Chirp</option>
               <option value="fm">Frequency Modulated</option>
               <option value="am">Amplitude Modulated</option>
               <option value="pulse">Pulse Train</option>
-              <option value="multitone">Multi-tone</option>
-              <option value="noise">White Noise</option>
-              <option value="pink_noise">Pink Noise</option>
             </select>
           </div>
 
@@ -329,7 +222,7 @@ export default function SignalGenerator({ onSignalGenerated }) {
             />
           </div>
 
-          {(signalType === 'fm' || signalType === 'am' || signalType === 'chirp') && (
+          {(signalType === 'fm' || signalType === 'am') && (
             <>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
