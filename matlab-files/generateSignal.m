@@ -1,19 +1,11 @@
 % MATLAB function for generating various types of signals
 % Usage: generateSignal(signalType, parameters, outputPath)
 
-function generateSignal(varargin)
+function generateSignal(signalType, parameters, outputPath)
     try
-        % Parse arguments
-        if numel(varargin) < 3
-            error('Not enough input arguments.');
-        end
-        signalType = varargin{1};
-        parameters = varargin{2};
-        outputPath = varargin{3};
-        
-        % Ensure parameters is a char array
-        if isstring(parameters) || ischar(parameters)
-            params = jsondecode(fileread(char(parameters)));
+        % Parse parameters
+        if ischar(parameters)
+            params = jsondecode(fileread(parameters));
         else
             params = parameters;
         end
@@ -61,9 +53,15 @@ function generateSignal(varargin)
                 signal = amplitude * carrier .* modulator;
                 
             case 'pulse'
-                dutyCycle = params.dutyCycle;
+                if isfield(params, 'dutyCycle')
+                    dutyCycle = params.dutyCycle;
+                else
+                    dutyCycle = 0.5;
+                end
                 signal = amplitude * pulstran(t, 0:1/frequency:duration, 'rectpuls', 1/frequency * dutyCycle);
                 
+            otherwise
+                error('Unsupported signal type: %s', signalType);
         end
         
         % Add noise if specified
@@ -114,7 +112,7 @@ function generateSignal(varargin)
         
         fid = fopen(outputPath, 'w');
         if fid == -1
-            error('Cannot create output file');
+            error('Cannot create output file at: %s', outputPath);
         end
         fprintf(fid, '%s', jsonStr);
         fclose(fid);

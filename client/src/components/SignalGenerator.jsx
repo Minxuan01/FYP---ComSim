@@ -36,7 +36,10 @@ export default function SignalGenerator({ onSignalGenerated }) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ signalType, parameters })
+        body: JSON.stringify({
+          signalType,
+          parameters
+        })
       });
 
       if (!response.ok) {

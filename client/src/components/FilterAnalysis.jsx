@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, LineElement, CategoryScale, LinearScale, PointElement, Tooltip, Title, LogarithmicScale } from 'chart.js';
-import { complex, add, multiply, divide, pow, abs, arg } from 'mathjs';
 
 ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Tooltip, Title, LogarithmicScale);
 
@@ -12,201 +11,63 @@ export default function FilterAnalysis({ filterParams, sampleRate = 44100 }) {
   const [showGroupDelay, setShowGroupDelay] = useState(true);
   const [showStepResponse, setShowStepResponse] = useState(true);
 
-  // Get filter analysis data from MATLAB backend
-  const calculateAnalysis = () => {
-    if (!filterParams || !filterParams.coefficients) return null;
+  // Calculate filter analysis data using MATLAB backend
+  const calculateAnalysis = async () => {
+    if (!filterParams) return null;
 
-    // The MATLAB backend should provide all analysis data
-    const coefficients = filterParams.coefficients;
-    
-    return {
-      coefficients: coefficients,
-      frequencyResponse: coefficients.frequencyResponse,
-      impulseResponse: coefficients.impulseResponse,
-      stepResponse: coefficients.stepResponse,
-      groupDelay: coefficients.groupDelay,
-      poles: coefficients.poles,
-      zeros: coefficients.zeros
-    };
+    try {
+      const { filterType, filterDesign, cutoffFreq, highCutoffFreq, filterOrder, ripple, stopbandAttenuation } = filterParams;
+      
+      const response = await fetch('/api/design-filter', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filterType,
+          filterDesign,
+          cutoffFreq,
+          highCutoffFreq,
+          filterOrder,
+          ripple,
+          stopbandAttenuation,
+          sampleRate
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.data;
+    } catch (error) {
+      console.error('Error calculating filter analysis:', error);
+      return null;
+    }
   };
 
-  // Update analysis data when filter parameters change
-  useEffect(() => {
-    const analysis = calculateAnalysis();
-    setAnalysisData(analysis);
-  }, [filterParams]);
 
-  // All analysis functions are now handled by MATLAB backend
-  // The following functions are kept for reference but not used:
-  const butterworthAnalysis = (cutoff, order, type) => {
-    const poles = [];
-    const zeros = [];
-    
-    // Calculate poles
-    for (let k = 0; k < order; k++) {
-      const angle = Math.PI * (2 * k + 1) / (2 * order);
-      const real = -Math.sin(angle);
-      const imag = Math.cos(angle);
-      poles.push({ real, imag });
-    }
 
-    // Calculate zeros based on filter type
-    if (type === 'highpass') {
-      // High-pass has zeros at z = 1
-      for (let i = 0; i < order; i++) {
-        zeros.push({ real: 1, imag: 0 });
-      }
-    } else if (type === 'bandpass') {
-      // Band-pass has zeros at z = 1 and z = -1
-      for (let i = 0; i < order; i++) {
-        zeros.push({ real: 1, imag: 0 });
-        zeros.push({ real: -1, imag: 0 });
-      }
-    } else if (type === 'bandstop') {
-      // Band-stop has zeros on unit circle
-      for (let i = 0; i < order; i++) {
-        const angle = Math.PI * (2 * i + 1) / (2 * order);
-        zeros.push({ real: Math.cos(angle), imag: Math.sin(angle) });
-      }
-    }
 
-    // Convert to transfer function coefficients
-    const b = [1];
-    const a = [1];
-    
-    // Add zeros
-    for (const zero of zeros) {
-      if (Math.abs(zero.imag) < 1e-10) {
-        b.push(-zero.real);
-      } else {
-        b.push(-2 * zero.real, zero.real * zero.real + zero.imag * zero.imag);
-      }
-    }
-    
-    // Add poles
-    for (const pole of poles) {
-      if (Math.abs(pole.imag) < 1e-10) {
-        a.push(-pole.real);
-      } else {
-        a.push(-2 * pole.real, pole.real * pole.real + pole.imag * pole.imag);
-      }
-    }
 
-    return [b, a, poles, zeros];
-  };
 
-  // Calculate frequency response
-  const calculateFrequencyResponse = (b, a, sampleRate) => {
-    const frequencies = [];
-    const magnitudes = [];
-    const phases = [];
-
-    for (let f = 1; f <= sampleRate / 2; f += sampleRate / 2000) {
-      const omega = 2 * Math.PI * f / sampleRate;
-      const z = complex(Math.cos(omega), Math.sin(omega));
-      
-      let numerator = complex(0, 0);
-      let denominator = complex(0, 0);
-
-      // Calculate H(z) = B(z)/A(z)
-      for (let i = 0; i < b.length; i++) {
-        numerator = add(numerator, multiply(b[i], pow(z, -i)));
-      }
-      for (let i = 0; i < a.length; i++) {
-        denominator = add(denominator, multiply(a[i], pow(z, -i)));
-      }
-
-      const H = divide(numerator, denominator);
-      const magnitude = 20 * Math.log10(abs(H));
-      const phase = arg(H) * 180 / Math.PI;
-
-      frequencies.push(f);
-      magnitudes.push(magnitude);
-      phases.push(phase);
-    }
-
-    return { frequencies, magnitudes, phases };
-  };
-
-  // Calculate impulse response
-  const calculateImpulseResponse = (b, a, length) => {
-    const impulse = new Array(length).fill(0);
-    impulse[0] = 1; // Unit impulse
-    
-    const response = new Array(length).fill(0);
-    
-    for (let n = 0; n < length; n++) {
-      let output = 0;
-      
-      // Feedforward terms
-      for (let i = 0; i < b.length && n - i >= 0; i++) {
-        output += b[i] * impulse[n - i];
-      }
-      
-      // Feedback terms
-      for (let i = 1; i < a.length && n - i >= 0; i++) {
-        output -= a[i] * response[n - i];
-      }
-      
-      response[n] = output;
-    }
-    
-    return response;
-  };
-
-  // Calculate step response
-  const calculateStepResponse = (b, a, length) => {
-    const step = new Array(length).fill(1);
-    const response = new Array(length).fill(0);
-    
-    for (let n = 0; n < length; n++) {
-      let output = 0;
-      
-      // Feedforward terms
-      for (let i = 0; i < b.length && n - i >= 0; i++) {
-        output += b[i] * step[n - i];
-      }
-      
-      // Feedback terms
-      for (let i = 1; i < a.length && n - i >= 0; i++) {
-        output -= a[i] * response[n - i];
-      }
-      
-      response[n] = output;
-    }
-    
-    return response;
-  };
-
-  // Calculate group delay
-  const calculateGroupDelay = (frequencies, phases) => {
-    const groupDelay = [];
-    
-    for (let i = 1; i < phases.length - 1; i++) {
-      const phaseDiff = phases[i + 1] - phases[i - 1];
-      const freqDiff = frequencies[i + 1] - frequencies[i - 1];
-      const delay = -phaseDiff / (freqDiff * 2 * Math.PI);
-      groupDelay.push(delay);
-    }
-    
-    return {
-      frequencies: frequencies.slice(1, -1),
-      delays: groupDelay
-    };
-  };
 
   // Update analysis when filter parameters change
   useEffect(() => {
-    const analysis = calculateAnalysis();
-    setAnalysisData(analysis);
+    const loadAnalysis = async () => {
+      const analysis = await calculateAnalysis();
+      setAnalysisData(analysis);
+    };
+    loadAnalysis();
   }, [filterParams, sampleRate]);
 
   // Pole-zero plot data
-  const poleZeroData = analysisData ? {
+  const poleZeroData = analysisData && analysisData.poleZero ? {
     datasets: [
       {
         label: 'Poles',
-        data: analysisData.poles.map(p => ({ x: p.real, y: p.imag })),
+        data: analysisData.poleZero.poles.map(p => ({ x: p.real, y: p.imag })),
         backgroundColor: 'rgba(239, 68, 68, 0.8)',
         borderColor: 'rgba(239, 68, 68, 1)',
         pointRadius: 8,
@@ -216,7 +77,7 @@ export default function FilterAnalysis({ filterParams, sampleRate = 44100 }) {
       },
       {
         label: 'Zeros',
-        data: analysisData.zeros.map(z => ({ x: z.real, y: z.imag })),
+        data: analysisData.poleZero.zeros.map(z => ({ x: z.real, y: z.imag })),
         backgroundColor: 'rgba(59, 130, 246, 0.8)',
         borderColor: 'rgba(59, 130, 246, 1)',
         pointRadius: 6,
@@ -327,12 +188,12 @@ export default function FilterAnalysis({ filterParams, sampleRate = 44100 }) {
   };
 
   // Impulse response data
-  const impulseResponseData = analysisData ? {
-    labels: Array.from({ length: analysisData.impulseResponse.length }, (_, i) => i),
+  const impulseResponseData = analysisData && analysisData.timeResponse ? {
+    labels: Array.from({ length: analysisData.timeResponse.impulse.length }, (_, i) => i),
     datasets: [
       {
         label: 'Impulse Response',
-        data: analysisData.impulseResponse,
+        data: analysisData.timeResponse.impulse,
         borderColor: 'rgba(34, 197, 94, 0.8)',
         backgroundColor: 'rgba(34, 197, 94, 0.1)',
         borderWidth: 2,
@@ -366,12 +227,12 @@ export default function FilterAnalysis({ filterParams, sampleRate = 44100 }) {
   };
 
   // Step response data
-  const stepResponseData = analysisData ? {
-    labels: Array.from({ length: analysisData.stepResponse.length }, (_, i) => i),
+  const stepResponseData = analysisData && analysisData.timeResponse ? {
+    labels: Array.from({ length: analysisData.timeResponse.step.length }, (_, i) => i),
     datasets: [
       {
         label: 'Step Response',
-        data: analysisData.stepResponse,
+        data: analysisData.timeResponse.step,
         borderColor: 'rgba(168, 85, 247, 0.8)',
         backgroundColor: 'rgba(168, 85, 247, 0.1)',
         borderWidth: 2,
@@ -405,12 +266,12 @@ export default function FilterAnalysis({ filterParams, sampleRate = 44100 }) {
   };
 
   // Group delay data
-  const groupDelayData = analysisData ? {
-    labels: analysisData.groupDelay.frequencies.slice(0, 1000),
+  const groupDelayData = analysisData && analysisData.timeResponse ? {
+    labels: analysisData.timeResponse.groupDelayFreq.slice(0, 1000),
     datasets: [
       {
         label: 'Group Delay',
-        data: analysisData.groupDelay.delays.slice(0, 1000),
+        data: analysisData.timeResponse.groupDelay.slice(0, 1000),
         borderColor: 'rgba(245, 158, 11, 0.8)',
         backgroundColor: 'rgba(245, 158, 11, 0.1)',
         borderWidth: 2,
@@ -550,13 +411,13 @@ export default function FilterAnalysis({ filterParams, sampleRate = 44100 }) {
             <div>
               <h4 className="font-medium text-gray-700 mb-2">Numerator (b):</h4>
               <div className="bg-gray-100 p-3 rounded font-mono text-sm">
-                [{analysisData.coefficients.b.map(c => c.toFixed(6)).join(', ')}]
+                [{analysisData.filterCoefficients.numerator.map(c => c.toFixed(6)).join(', ')}]
               </div>
             </div>
             <div>
               <h4 className="font-medium text-gray-700 mb-2">Denominator (a):</h4>
               <div className="bg-gray-100 p-3 rounded font-mono text-sm">
-                [{analysisData.coefficients.a.map(c => c.toFixed(6)).join(', ')}]
+                [{analysisData.filterCoefficients.denominator.map(c => c.toFixed(6)).join(', ')}]
               </div>
             </div>
           </div>

@@ -29,8 +29,8 @@ export default function FilterDesigner({ audioData, onFilterApplied }) {
     }
   }, []);
 
-  // Calculate filter coefficients using MATLAB backend
-  const calculateFilterCoefficients = async () => {
+  // Design filter using MATLAB backend
+  const designFilter = async () => {
     try {
       const response = await fetch('/api/design-filter', {
         method: 'POST',
@@ -188,11 +188,11 @@ export default function FilterDesigner({ audioData, onFilterApplied }) {
   // Calculate frequency response using MATLAB backend
   const calculateFrequencyResponse = async () => {
     try {
-      const filterCoefficients = await calculateFilterCoefficients();
-      if (!filterCoefficients) return null;
-      
-      // The frequency response is already included in the filter design result
-      return filterCoefficients.frequencyResponse || null;
+      const filterData = await designFilter();
+      if (filterData && filterData.frequencyResponse) {
+        return filterData.frequencyResponse;
+      }
+      return null;
     } catch (error) {
       console.error('Error calculating frequency response:', error);
       return null;
@@ -200,9 +200,9 @@ export default function FilterDesigner({ audioData, onFilterApplied }) {
   };
 
   // Apply filter to audio data using MATLAB backend
-  const applyFilterToAudio = async (audioData, filterCoefficients) => {
+  const applyFilterToAudio = async (audioData) => {
     try {
-      // Prepare signal data
+      // Extract signal data
       let signalData;
       if (audioData.waveform) {
         signalData = audioData.waveform;
@@ -214,6 +214,13 @@ export default function FilterDesigner({ audioData, onFilterApplied }) {
         throw new Error('Invalid audio data format');
       }
 
+      // Get filter coefficients from MATLAB
+      const filterData = await designFilter();
+      if (!filterData || !filterData.filterCoefficients) {
+        throw new Error('Failed to get filter coefficients');
+      }
+
+      // Send signal data and filter coefficients as JSON
       const response = await fetch('/api/apply-filter', {
         method: 'POST',
         headers: {
@@ -221,8 +228,8 @@ export default function FilterDesigner({ audioData, onFilterApplied }) {
         },
         body: JSON.stringify({
           signal: signalData,
-          filterCoefficients: filterCoefficients,
-          sampleRate: audioData.sampleRate || 44100
+          sampleRate: audioData.sampleRate || audioData.fs || 44100,
+          filterCoefficients: filterData.filterCoefficients
         })
       });
 
@@ -234,18 +241,17 @@ export default function FilterDesigner({ audioData, onFilterApplied }) {
       return result.data.filteredSignal;
     } catch (error) {
       console.error('Error applying filter:', error);
-      alert('Failed to apply filter: ' + error.message);
-      return null;
+      throw error;
     }
   };
 
   // Update frequency response when parameters change
   useEffect(() => {
-    const loadFrequencyResponse = async () => {
+    const loadResponse = async () => {
       const response = await calculateFrequencyResponse();
       setFilterResponse(response);
     };
-    loadFrequencyResponse();
+    loadResponse();
   }, [filterType, filterDesign, cutoffFreq, highCutoffFreq, filterOrder, ripple, stopbandAttenuation, sampleRate]);
 
   // Handle filter application
@@ -255,11 +261,7 @@ export default function FilterDesigner({ audioData, onFilterApplied }) {
     setIsProcessing(true);
     
     try {
-      const filterCoefficients = await calculateFilterCoefficients();
-      if (!filterCoefficients) return;
-      
-      const filtered = await applyFilterToAudio(audioData, filterCoefficients);
-      if (!filtered) return;
+      const filtered = await applyFilterToAudio(audioData);
       
       // Create filtered result based on input data structure
       let filteredResult;
@@ -292,16 +294,7 @@ export default function FilterDesigner({ audioData, onFilterApplied }) {
         onFilterApplied({
           original: audioData,
           filtered: filteredResult,
-          filterParams: { 
-            filterType, 
-            filterDesign, 
-            cutoffFreq, 
-            highCutoffFreq, 
-            filterOrder, 
-            ripple, 
-            stopbandAttenuation,
-            coefficients: filterCoefficients
-          }
+          filterParams: { filterType, filterDesign, cutoffFreq, highCutoffFreq, filterOrder, ripple, stopbandAttenuation }
         });
       }
     } catch (error) {
@@ -318,7 +311,7 @@ export default function FilterDesigner({ audioData, onFilterApplied }) {
     datasets: [
       {
         label: 'Magnitude Response (dB)',
-        data: filterResponse.magnitude.slice(0, 1000),
+        data: filterResponse.magnitudes.slice(0, 1000),
         borderColor: 'rgba(59, 130, 246, 0.8)',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         borderWidth: 2,
@@ -327,7 +320,7 @@ export default function FilterDesigner({ audioData, onFilterApplied }) {
       },
       {
         label: 'Phase Response (degrees)',
-        data: filterResponse.phase.slice(0, 1000),
+        data: filterResponse.phases.slice(0, 1000),
         borderColor: 'rgba(239, 68, 68, 0.8)',
         backgroundColor: 'rgba(239, 68, 68, 0.1)',
         borderWidth: 2,

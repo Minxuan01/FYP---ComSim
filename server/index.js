@@ -7,7 +7,8 @@ const path = require("path");
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' })); // Increase JSON payload limit for large signal arrays
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Error handler for multer file size limits
 app.use((error, req, res, next) => {
@@ -38,22 +39,24 @@ const runMatlabExecutable = (executableName, args, outputPath) => {
 
     let stdoutData = '';
     let stderrData = '';
-
+    
     matlabProcess.stdout.on("data", (data) => {
       stdoutData += data.toString();
-      console.log("MATLAB output:", data.toString());
+      console.log("MATLAB stdout:", data.toString());
     });
     
     matlabProcess.stderr.on("data", (data) => {
       stderrData += data.toString();
-      console.error("MATLAB error:", data.toString());
+      console.error("MATLAB stderr:", data.toString());
     });
 
     matlabProcess.on("close", (code) => {
       console.log(`MATLAB ${executableName} exited with code ${code}`);
-
+      
       if (code !== 0) {
-        return reject(new Error(`MATLAB process failed with code ${code}.\nSTDOUT: ${stdoutData}\nSTDERR: ${stderrData}`));
+        console.log("MATLAB stdout output:", stdoutData);
+        console.log("MATLAB stderr output:", stderrData);
+        return reject(new Error(`MATLAB process failed with code ${code}:\nSTDOUT: ${stdoutData}\nSTDERR: ${stderrData}`));
       }
 
       if (!fs.existsSync(outputPath)) {
@@ -139,42 +142,35 @@ app.post("/api/design-filter", async (req, res) => {
 });
 
 // POST route for applying filters
-app.post("/api/apply-filter", upload.single("signal"), async (req, res) => {
+app.post("/api/apply-filter", async (req, res) => {
   try {
-    const { filterCoefficients } = req.body;
-    const signalPath = req.file ? path.resolve(req.file.path) : null;
+    const { signal, sampleRate, filterCoefficients } = req.body;
     const outputPath = path.resolve("outputs", `filtered_signal_${Date.now()}.json`);
     
     fs.mkdirSync("outputs", { recursive: true });
 
     console.log("Applying filter to signal");
 
-    // Save filter coefficients to temporary file if needed
-    let coeffPath = null;
-    if (typeof filterCoefficients === 'object') {
-      coeffPath = path.resolve("outputs", `coeff_${Date.now()}.mat`);
-      // For now, we'll pass coefficients as JSON
-      fs.writeFileSync(coeffPath.replace('.mat', '.json'), JSON.stringify(filterCoefficients));
-      coeffPath = coeffPath.replace('.mat', '.json');
-    }
+    // Save signal data to temporary file
+    const signalPath = path.resolve("outputs", `signal_${Date.now()}.json`);
+    fs.writeFileSync(signalPath, JSON.stringify({ signal, sampleRate }));
 
-    const args = [signalPath || '', coeffPath || JSON.stringify(filterCoefficients), outputPath];
-    const result = await runMatlabExecutable("applyFilter", args);
+    // Save filter coefficients to temporary file
+    const coeffPath = path.resolve("outputs", `coeff_${Date.now()}.json`);
+    fs.writeFileSync(coeffPath, JSON.stringify(filterCoefficients));
+
+    const args = [signalPath, coeffPath, outputPath];
+    const result = await runMatlabExecutable("applyFilter", args, outputPath);
 
     // Cleanup
-    if (req.file) fs.unlink(req.file.path, () => {});
-    if (coeffPath) fs.unlink(coeffPath, () => {});
+    fs.unlink(signalPath, () => {});
+    fs.unlink(coeffPath, () => {});
     fs.unlink(outputPath, () => {});
 
     res.json({ success: true, message: "Filter applied successfully", data: result });
   } catch (error) {
     console.error("Filter application error:", error.message);
     res.status(500).json({ success: false, error: error.message });
-    
-    // Cleanup on error
-    if (req.file) {
-      fs.unlink(req.file.path, () => {});
-    }
   }
 });
 
@@ -190,7 +186,6 @@ app.post("/api/generate-signal", async (req, res) => {
 
     // Save parameters to temporary file
     const paramsPath = path.resolve("outputs", `params_${Date.now()}.json`);
-    console.log("Parameters JSON path:", paramsPath);
     fs.writeFileSync(paramsPath, JSON.stringify(parameters));
 
     const result = await runMatlabExecutable("generateSignal", [signalType, paramsPath, outputPath], outputPath);
@@ -223,7 +218,7 @@ app.post("/api/modulation", upload.single("signal"), async (req, res) => {
 
     const args = [modulationType, signalPath || JSON.stringify({}), carrierFreq.toString(), 
                  sampleRate.toString(), paramsPath, outputPath];
-    const result = await runMatlabExecutable("modulationSimulation", args);
+    const result = await runMatlabExecutable("modulationSimulation", args, outputPath);
 
     // Cleanup
     if (req.file) fs.unlink(req.file.path, () => {});

@@ -1,22 +1,23 @@
 % MATLAB function for comprehensive filter design
 % Usage: designFilter(filterType, filterDesign, cutoffFreq, highCutoffFreq, filterOrder, ripple, stopbandAttenuation, sampleRate, outputPath)
 
-function designFilter(varargin)
+function designFilter(filterType, filterDesign, cutoffFreq, highCutoffFreq, filterOrder, ripple, stopbandAttenuation, sampleRate, outputPath)
     try
-        if numel(varargin) < 9
-            error('Not enough input arguments.');
+        % Convert string inputs to appropriate types
+        if ischar(filterType)
+            filterType = string(filterType);
         end
-
-        filterType = string(varargin{1});
-        filterDesign = string(varargin{2});
-        cutoffFreq = str2double(varargin{3});
-        highCutoffFreq = str2double(varargin{4});
-        filterOrder = str2double(varargin{5});
-        ripple = str2double(varargin{6});
-        stopbandAttenuation = str2double(varargin{7});
-        sampleRate = str2double(varargin{8});
-        outputPath = char(varargin{9});     % Convert to char for file operations
-
+        if ischar(filterDesign)
+            filterDesign = string(filterDesign);
+        end
+        
+        cutoffFreq = str2double(cutoffFreq);
+        highCutoffFreq = str2double(highCutoffFreq);
+        filterOrder = str2double(filterOrder);
+        ripple = str2double(ripple);
+        stopbandAttenuation = str2double(stopbandAttenuation);
+        sampleRate = str2double(sampleRate);
+        
         % Normalize frequencies
         nyquist = sampleRate / 2;
         normalizedCutoff = cutoffFreq / nyquist;
@@ -48,6 +49,10 @@ function designFilter(varargin)
         % Calculate pole-zero plot
         [z, p, k] = tf2zp(b, a);
         
+        % Convert complex poles and zeros to structures with real and imaginary parts
+        poles_struct = struct('real', num2cell(real(p)), 'imag', num2cell(imag(p)));
+        zeros_struct = struct('real', num2cell(real(z)), 'imag', num2cell(imag(z)));
+        
         % Calculate impulse response
         impulseResponse = impz(b, a, 100);
         
@@ -65,12 +70,12 @@ function designFilter(varargin)
         
         results.frequencyResponse = struct();
         results.frequencyResponse.frequencies = w;
-        results.frequencyResponse.magnitude = magnitude;
-        results.frequencyResponse.phase = phase;
+        results.frequencyResponse.magnitudes = magnitude;
+        results.frequencyResponse.phases = phase;
         
-        [z, p, k] = tf2zp(b, a);
-        results.poleZero.zeros = struct('real', real(z), 'imag', imag(z));
-        results.poleZero.poles = struct('real', real(p), 'imag', imag(p));
+        results.poleZero = struct();
+        results.poleZero.zeros = zeros_struct;
+        results.poleZero.poles = poles_struct;
         results.poleZero.gain = k;
         
         results.timeResponse = struct();
@@ -91,10 +96,10 @@ function designFilter(varargin)
         
         % Save results as JSON
         jsonStr = jsonencode(results);
-
+        
         fid = fopen(outputPath, 'w');
         if fid == -1
-            error('Cannot create output file');
+            error('Cannot create output file at: %s', outputPath);
         end
         fprintf(fid, '%s', jsonStr);
         fclose(fid);

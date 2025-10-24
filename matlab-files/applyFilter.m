@@ -5,10 +5,18 @@ function applyFilter(inputSignal, filterCoefficients, outputPath)
     try
         % Parse input signal (can be file path or direct data)
         if ischar(inputSignal) || isstring(inputSignal)
-            % Load signal from file
-            [signal, fs] = audioread(inputSignal);
-            if size(signal, 2) > 1
-                signal = mean(signal, 2); % Convert stereo to mono
+            % Check if it's a JSON file
+            if contains(inputSignal, '.json')
+                % Load signal from JSON file
+                signalData = jsondecode(fileread(inputSignal));
+                signal = signalData.signal;
+                fs = signalData.sampleRate;
+            else
+                % Try to load as audio file
+                [signal, fs] = audioread(inputSignal);
+                if size(signal, 2) > 1
+                    signal = mean(signal, 2); % Convert stereo to mono
+                end
             end
         else
             % Assume inputSignal is the actual signal data
@@ -18,10 +26,23 @@ function applyFilter(inputSignal, filterCoefficients, outputPath)
         
         % Parse filter coefficients
         if ischar(filterCoefficients) || isstring(filterCoefficients)
-            % Load coefficients from file
-            coeffData = load(filterCoefficients);
-            b = coeffData.b;
-            a = coeffData.a;
+            % Check if it's a JSON file
+            if contains(filterCoefficients, '.json')
+                % Load coefficients from JSON file
+                coeffData = jsondecode(fileread(filterCoefficients));
+                b = coeffData.numerator;
+                a = coeffData.denominator;
+            elseif contains(filterCoefficients, '{') || contains(filterCoefficients, '[')
+                % It's a JSON string
+                coeffData = jsondecode(filterCoefficients);
+                b = coeffData.numerator;
+                a = coeffData.denominator;
+            else
+                % Load coefficients from MAT file
+                coeffData = load(filterCoefficients);
+                b = coeffData.b;
+                a = coeffData.a;
+            end
         else
             % Assume filterCoefficients is a structure
             b = filterCoefficients.numerator;
@@ -79,17 +100,16 @@ function applyFilter(inputSignal, filterCoefficients, outputPath)
         
         % Save results as JSON
         jsonStr = jsonencode(results);
-        outputFile = fullfile(outputPath, 'filteredSignal.json');
         
-        fid = fopen(outputFile, 'w');
+        fid = fopen(outputPath, 'w');
         if fid == -1
-            error('Cannot create output file');
+            error('Cannot create output file at: %s', outputPath);
         end
         fprintf(fid, '%s', jsonStr);
         fclose(fid);
         
         fprintf('Filter application completed successfully\n');
-        fprintf('Results saved to: %s\n', outputFile);
+        fprintf('Results saved to: %s\n', outputPath);
         
     catch ME
         fprintf('Error: %s\n', ME.message);
