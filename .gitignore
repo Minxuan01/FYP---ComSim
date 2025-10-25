@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+frontend/dist/
+frontend/build/
+
+# MATLAB compiled files
+matlab/compiled/
+*.exe
+*.app
+*.dmg
+
+# MATLAB auto-generated files
+*.asv
+*.mex*
+*.mat
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Plan files (optional, comment out if you want to track them)
+*.plan.md
+
